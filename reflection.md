@@ -2,15 +2,40 @@
 
 ## 1. System Design
 
+**Core user actions**
+
+These are the three core things a user should be able to do in PawPal+:
+
+1. **Add a pet care task.** The user records something their pet needs — a walk, a feeding, medication, grooming, or enrichment — along with how long it takes and how important it is (its priority). This is how the owner tells PawPal+ what needs to happen during the day.
+
+2. **Generate a daily plan.** The user asks PawPal+ to turn their list of tasks into an ordered schedule for the day. The app weighs the owner's constraints (such as how much time is available) and each task's priority to decide which tasks to include and in what order.
+
+3. **View today's plan and why it was chosen.** The user sees the resulting schedule laid out clearly — what happens, when, and for how long — together with a short explanation of the reasoning, so they understand why each task was placed the way it was.
+
+---
+
 **a. Initial design**
 
-- Briefly describe your initial UML design.
-- What classes did you include, and what responsibilities did you assign to each?
+My initial UML had six classes, each with a single clear responsibility:
+
+- **Owner** — the entry point for the user. Holds the owner's name and their planning constraints (`available_minutes`, `preferred_window`), plus the lists of pets and tasks. Responsible for registering pets (`add_pet`) and collecting care tasks (`add_task`).
+- **Pet** — a plain data object for the animal being cared for (name, species, breed). It has no behavior of its own; it exists so tasks can be associated with a specific pet.
+- **CareTask** — one thing that needs doing (walk, feed, meds, grooming, enrichment). Holds its title, category, duration, priority, and the pet it belongs to. Its one behavior is `priority_score()`, which turns the priority into a number the scheduler can sort by.
+- **Scheduler** — a stateless engine whose sole job is to turn a set of tasks and constraints into a plan (`generate_plan`). Keeping it stateless means scheduling logic lives in one place and is easy to test in isolation.
+- **DailyPlan** — the output of scheduling. Holds the ordered scheduled items and a reasoning explanation, and can report `total_minutes()` and produce an `explain()` string.
+- **ScheduledTask** — a small wrapper pairing a `CareTask` with the `start_time` it was placed at in the plan.
+
+I deliberately kept it lean: constraints and preferences live as simple fields on `Owner` rather than in a separate `Constraint` class, and priority is a string interpreted by `priority_score()` rather than its own type. The relationships are: an Owner owns many Pets and creates many CareTasks, each CareTask is for one Pet, the Scheduler reads CareTasks and produces a DailyPlan, and a DailyPlan contains many ScheduledTasks that each wrap one CareTask.
 
 **b. Design changes**
 
-- Did your design change during implementation?
-- If yes, describe at least one change and why you made it.
+After drafting the skeleton I asked my AI assistant to review `pawpal_system.py` for missing relationships and logic bottlenecks. Two pieces of feedback led me to change the design:
+
+1. **The owner's preferences couldn't reach the scheduler.** `Owner` stored both `available_minutes` and `preferred_window`, but `Scheduler.generate_plan()` only accepted `available_minutes` — so the preferred time window had no way into the engine. I added a `preferred_window` parameter to `generate_plan()` so all of the owner's constraints actually flow into the scheduling logic, closing the gap between what the Owner holds and what the Scheduler can use.
+
+2. **There was no way to explain what got left out.** When the total task time exceeds the available minutes, the scheduler has to drop tasks, but `DailyPlan` had nowhere to record them — which would make it impossible for `explain()` to justify *why* a task wasn't included. I added a `skipped: list[CareTask]` field to `DailyPlan` so dropped tasks are tracked and the explanation can account for them. This directly supports the "explain the plan" core action.
+
+I did **not** adopt every suggestion. The reviewer also flagged that `priority` is a free-form string and that `start_time` as a string makes time arithmetic awkward. I chose to leave both for the implementation phase rather than add types/enums now, to avoid locking in complexity before I know exactly how the scheduling loop needs the data. (UML will be reconciled with these changes in Phase 6.)
 
 ---
 
