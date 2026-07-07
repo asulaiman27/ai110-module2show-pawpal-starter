@@ -75,19 +75,33 @@ Recurring tasks
 
 ## 🧪 Testing PawPal+
 
+Run the automated test suite from the project root:
+
 ```bash
-# Run the full test suite:
-pytest
-
-# Run with coverage:
-pytest --cov
+python -m pytest
 ```
 
-Sample test output:
+The suite (`tests/test_pawpal.py`, 12 tests) covers:
+
+- **Basic behavior** — marking a task complete flips its status; adding a task grows a pet's task list.
+- **Sorting** — `daily_schedule()` returns tasks in chronological order, with untimed tasks placed after timed ones.
+- **Recurrence** — completing a `daily` task creates a follow-up due one day later; a `weekly` task advances seven days; a `once` task does not recur.
+- **Conflict detection** — duplicate times raise exactly one warning; distinct times and already-completed tasks raise none.
+- **Edge cases** — a pet with no tasks yields an empty schedule and no conflicts; filtering separates pending vs. completed and scopes to a single pet.
+
+Successful run:
 
 ```
-# Paste your pytest output here
+============================= test session starts ==============================
+platform darwin -- Python 3.9.6, pytest-8.4.2, pluggy-1.6.0
+collected 12 items
+
+tests/test_pawpal.py ............                                        [100%]
+
+============================== 12 passed in 0.01s ==============================
 ```
+
+**Confidence level: ★★★★☆ (4/5).** The core logic — sorting, recurrence, filtering, and exact-time conflict detection — is well covered and passing. I held back the fifth star because conflict detection only catches exact time matches, not overlapping durations (see reflection 2b), and time strings aren't yet validated for format, so malformed input like `"8:00"` or `"25:00"` is untested.
 
 ## 📐 Smarter Scheduling
 
