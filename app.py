@@ -87,22 +87,63 @@ st.divider()
 # --- Today's schedule -------------------------------------------------------
 st.subheader("Today's schedule")
 scheduler = Scheduler(owner)
-schedule = scheduler.daily_schedule()
+
+# Show any confirmation carried over from the previous run (st.rerun clears
+# the current output, so we stash the message and display it here).
+flash = st.session_state.pop("flash", None)
+if flash:
+    st.success(flash)
+
+# Conflict warnings first, so the owner sees clashes before reading the plan.
+# Each warning is its own st.warning banner — high-visibility and actionable.
+for warning in scheduler.detect_conflicts():
+    st.warning(warning)
+
+# Let the owner filter what the schedule shows (all pets or just one).
+pet_names = [p.name for p in owner.pets]
+choice = st.selectbox("Show tasks for", ["All pets", *pet_names]) if pet_names else "All pets"
+
+schedule = scheduler.daily_schedule()  # pending tasks, sorted chronologically
+if choice != "All pets":
+    schedule = [(pet, task) for pet, task in schedule if pet.name == choice]
 
 if not schedule:
     st.info("Nothing pending. Add tasks above to build the schedule.")
 else:
+    # Professional at-a-glance view of the sorted plan.
+    st.table(
+        [
+            {
+                "Time": task.time or "anytime",
+                "Task": task.description,
+                "Pet": pet.name,
+                "Priority": task.priority,
+                "Repeats": task.frequency,
+            }
+            for pet, task in schedule
+        ]
+    )
+
+    # Per-task "mark done" controls (also triggers recurrence for daily/weekly).
+    st.caption("Mark a task done as you finish it:")
     for pet, task in schedule:
-        cols = st.columns([5, 1])
         when = task.time or "anytime"
-        cols[0].markdown(f"**{when}** — {task.description}  \n_{pet.name} · {task.priority} · {task.frequency}_")
-        # Wiring the Task class's completion behaviour to a button.
+        cols = st.columns([5, 1])
+        cols[0].markdown(f"**{when}** — {task.description}  ·  _{pet.name}_")
         if cols[1].button("Done", key=f"done-{pet.name}-{task.description}-{task.time}"):
-            scheduler.mark_complete(task)
+            nxt = scheduler.mark_complete(task)
+            if nxt is not None:
+                st.session_state["flash"] = (
+                    f"Nice! “{task.description}” done — next {task.frequency} "
+                    f"occurrence queued for {nxt.due_date}."
+                )
+            else:
+                st.session_state["flash"] = f"Nice! “{task.description}” marked done."
             st.rerun()
 
-    summary = scheduler.summary()
-    st.caption(
-        f"{summary['pending']} pending · {summary['completed']} done · "
-        f"{summary['total_tasks']} total across {summary['pets']} pet(s)"
-    )
+# Running summary of the whole system (all pets, all statuses).
+summary = scheduler.summary()
+st.caption(
+    f"{summary['pending']} pending · {summary['completed']} done · "
+    f"{summary['total_tasks']} total across {summary['pets']} pet(s)"
+)

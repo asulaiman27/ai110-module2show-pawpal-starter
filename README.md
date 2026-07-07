@@ -22,6 +22,15 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## ✨ Features
+
+- **Multiple pets, per-pet tasks** — one owner manages many pets, and each pet keeps its own list of care tasks (walks, feeding, meds, grooming, enrichment).
+- **Sorting by time** — the daily schedule lists tasks in chronological `"HH:MM"` order, with untimed "anytime" tasks placed last and priority as a tiebreaker (`Scheduler.daily_schedule()` / `sort_by_time()`).
+- **Filtering** — view tasks scoped to a single pet, or split by completion status (`Scheduler.filter_by_pet()` / `filter_by_status()`).
+- **Conflict warnings** — the scheduler flags pending tasks booked at the same time and surfaces a plain-language warning instead of failing (`Scheduler.detect_conflicts()`).
+- **Daily / weekly recurrence** — completing a recurring task automatically queues its next occurrence, advancing the due date by a day or a week (`Task.next_occurrence()` / `Scheduler.mark_task_complete()`).
+- **Live task completion** — mark tasks done in the UI; recurring tasks reschedule themselves and a summary tracks pending vs. completed counts.
+
 ## Getting started
 
 ### Setup
@@ -116,12 +125,58 @@ These are the "smart" behaviors in the logic layer and the method that implement
 
 ## 📸 Demo Walkthrough
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+### What the app lets you do
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
+Launch the UI with `streamlit run app.py`. The single-page app has three areas:
+
+- **Owner** — set the owner's name (persisted in `st.session_state` so it survives interactions).
+- **Add a pet** — enter a name, species, and optional breed; the pet is registered under the owner.
+- **Add a task** — pick a pet, then give the task a description, time (`HH:MM`), frequency (daily / weekly / once), and priority.
+- **Today's schedule** — the pending tasks, sorted by time, shown as a table; a filter narrows to one pet; each task has a **Done** button; conflict warnings appear as banners above the plan.
+
+### Example workflow
+
+1. Set the owner name to **Jordan**.
+2. **Add a pet:** `Mochi` (dog). Add a second pet: `Biscuit` (cat).
+3. **Add tasks:** for Mochi, `Morning walk` at `08:00` (daily, high); for Biscuit, `Breakfast` at `08:00` (high) and `Litter box` at `07:30`.
+4. **View Today's schedule** — tasks appear in chronological order (`07:30` before `08:00`), and because Mochi's walk and Biscuit's breakfast are both at `08:00`, a warning banner reads *"⚠️ Conflict at 08:00: Morning walk (Mochi), Breakfast (Biscuit)."*
+5. **Filter** to just Mochi to see only that pet's tasks.
+6. Click **Done** on the daily `Morning walk` — it's marked complete and its next occurrence is automatically queued for the following day.
+
+### Key Scheduler behaviors shown
+
+- **Sorting by time** — chronological order with untimed tasks last.
+- **Conflict warnings** — same-time tasks flagged as a banner, not a crash.
+- **Daily recurrence** — completing a daily task rolls it forward one day.
+- **Filtering & summary** — per-pet filtering and a pending/done/total count.
+
+### Sample CLI output (`python main.py`)
+
+```
+Today's Schedule (sorted by time)
+================================================
+    07:30  Litter box  [Biscuit · medium]
+    08:00  Morning walk  [Mochi · high]
+    08:00  Breakfast  [Biscuit · high]
+    18:00  Evening walk  [Mochi · high]
+  anytime  Brush coat  [Mochi · low]
+================================================
+
+Conflict check
+------------------------------------------------
+  ⚠️  Conflict at 08:00: Morning walk (Mochi), Breakfast (Biscuit)
+
+Filtering
+------------------------------------------------
+  Mochi's tasks: ['Evening walk', 'Morning walk', 'Brush coat']
+  Pending everywhere: ['Evening walk', 'Morning walk', 'Brush coat', 'Breakfast', 'Litter box']
+
+Recurring tasks
+------------------------------------------------
+  Completing 'Morning walk' (due 2026-07-07)...
+  -> auto-created next occurrence due 2026-07-08 (completed=False)
+
+5 pending · 1 done · 6 total across 2 pet(s)
+```
 
 **Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->
