@@ -11,8 +11,13 @@ Backend classes for the pet-care planning assistant:
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 # Lower rank sorts earlier / is more important.
 PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
+
+# How far ahead the next occurrence of a recurring task lands.
+FREQUENCY_STEP = {"daily": timedelta(days=1), "weekly": timedelta(weeks=1)}
 
 
 class Task:
@@ -25,6 +30,7 @@ class Task:
         frequency: str = "daily",
         priority: str = "medium",
         completed: bool = False,
+        due_date: date | None = None,
     ) -> None:
         """Create a care task with its description, timing, and priority."""
         self.description = description
@@ -34,6 +40,8 @@ class Task:
         self.frequency = frequency
         self.priority = priority
         self.completed = completed
+        # Calendar day the task is due; used to roll recurring tasks forward.
+        self.due_date = due_date
 
     def mark_complete(self) -> None:
         """Mark the task as done."""
@@ -52,14 +60,37 @@ class Task:
         """Return a sortable rank for this task's priority (lower = higher)."""
         return PRIORITY_ORDER.get(self.priority, PRIORITY_ORDER["medium"])
 
-    def sort_key(self) -> tuple[int, int, str]:
-        """Sort key: timed tasks first (by time), then by priority.
+    def is_recurring(self) -> bool:
+        """Return True if this task repeats (daily or weekly)."""
+        return self.frequency in FREQUENCY_STEP
 
-        Tasks with no set time sort after timed ones so the day still leads
-        with its fixed appointments.
+    def next_occurrence(self) -> "Task | None":
+        """Return a fresh, uncompleted copy due on the next cycle.
+
+        Advances ``due_date`` by one day (daily) or one week (weekly) using
+        ``timedelta``; returns None for one-off tasks. If no due date was set,
+        the next occurrence is measured from today.
+        """
+        step = FREQUENCY_STEP.get(self.frequency)
+        if step is None:
+            return None
+        base = self.due_date or date.today()
+        return Task(
+            self.description,
+            time=self.time,
+            frequency=self.frequency,
+            priority=self.priority,
+            due_date=base + step,
+        )
+
+    def sort_key(self) -> tuple[int, str, int]:
+        """Sort key: chronological by time, then by priority as a tiebreaker.
+
+        Tasks with no set time sort after timed ones so the day leads with its
+        fixed appointments; among tasks at the same time, higher priority wins.
         """
         has_time = 0 if self.time else 1
-        return (has_time, self.priority_rank(), self.time)
+        return (has_time, self.time, self.priority_rank())
 
     def __repr__(self) -> str:
         """Return a compact, readable one-line view of the task."""
@@ -166,14 +197,75 @@ class Scheduler:
         """
         return sorted(self.pending_tasks(), key=lambda pair: pair[1].sort_key())
 
-    def tasks_for(self, pet_name: str) -> list[Task]:
+    def sort_by_time(self, tasks: list[Task] | None = None) -> list[Task]:
+        """Return tasks sorted by their "HH:MM" time (untimed tasks last).
+
+        Zero-padded "HH:MM" strings sort correctly with a plain string compare,
+        so a lambda key is all we need; empty times map to "99:99" to sink them
+        to the end.
+        """
+        if tasks is None:
+            tasks = self.owner.all_tasks()
+        return sorted(tasks, key=lambda t: t.time or "99:99")
+
+    def filter_by_status(self, completed: bool = False) -> list[tuple[Pet, Task]]:
+        """Return (pet, task) pairs whose completion matches ``completed``."""
+        return [(pet, task) for pet, task in self.all_tasks() if task.completed == completed]
+
+    def filter_by_pet(self, pet_name: str) -> list[Task]:
         """Return the tasks belonging to a single pet by name."""
         pet = self.owner.get_pet(pet_name)
         return list(pet.tasks) if pet else []
 
-    def mark_complete(self, task: Task) -> None:
-        """Mark a task complete (delegates to the task)."""
+    # Kept as an alias so older callers using tasks_for() still work.
+    tasks_for = filter_by_pet
+
+    def _owning_pet(self, task: Task) -> Pet | None:
+        """Find which of the owner's pets holds this task, if any."""
+        for pet in self.owner.pets:
+            if task in pet.tasks:
+                return pet
+        return None
+
+    def mark_task_complete(self, task: Task) -> "Task | None":
+        """Mark a task done and, if it recurs, queue its next occurrence.
+
+        Returns the newly created next-occurrence task (added to the same pet),
+        or None for one-off tasks.
+        """
         task.mark_complete()
+        nxt = task.next_occurrence()
+        if nxt is not None:
+            pet = self._owning_pet(task)
+            if pet is not None:
+                pet.add_task(nxt)
+        return nxt
+
+    # Backwards-compatible alias for the UI/earlier callers.
+    def mark_complete(self, task: Task) -> "Task | None":
+        """Alias for :meth:`mark_task_complete`."""
+        return self.mark_task_complete(task)
+
+    def detect_conflicts(self) -> list[str]:
+        """Return warning strings for pending tasks that share the same time.
+
+        This is a lightweight, non-crashing check: it flags exact "HH:MM"
+        collisions (across any pets) and returns human-readable warnings rather
+        than raising. See reflection 2b for the tradeoff versus true overlap
+        detection.
+        """
+        by_time: dict[str, list[tuple[Pet, Task]]] = {}
+        for pet, task in self.pending_tasks():
+            if task.time:
+                by_time.setdefault(task.time, []).append((pet, task))
+
+        warnings: list[str] = []
+        for time_str in sorted(by_time):
+            group = by_time[time_str]
+            if len(group) > 1:
+                labels = ", ".join(f"{task.description} ({pet.name})" for pet, task in group)
+                warnings.append(f"⚠️  Conflict at {time_str}: {labels}")
+        return warnings
 
     def summary(self) -> dict[str, int]:
         """Return counts the UI can show at a glance."""

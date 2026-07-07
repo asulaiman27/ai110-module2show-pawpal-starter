@@ -47,14 +47,30 @@ pip install -r requirements.txt
 Terminal output from running the logic-layer test script (`python main.py`):
 
 ```
-Today's Schedule for Jordan
-========================================
-    07:30  Breakfast  [Biscuit · high]
+Today's Schedule (sorted by time)
+================================================
+    07:30  Litter box  [Biscuit · medium]
     08:00  Morning walk  [Mochi · high]
+    08:00  Breakfast  [Biscuit · high]
     18:00  Evening walk  [Mochi · high]
-  anytime  Brush coat  [Biscuit · low]
-========================================
-4 task(s) to go across 2 pet(s) — 0 done.
+  anytime  Brush coat  [Mochi · low]
+================================================
+
+Conflict check
+------------------------------------------------
+  ⚠️  Conflict at 08:00: Morning walk (Mochi), Breakfast (Biscuit)
+
+Filtering
+------------------------------------------------
+  Mochi's tasks: ['Evening walk', 'Morning walk', 'Brush coat']
+  Pending everywhere: ['Evening walk', 'Morning walk', 'Brush coat', 'Breakfast', 'Litter box']
+
+Recurring tasks
+------------------------------------------------
+  Completing 'Morning walk' (due 2026-07-07)...
+  -> auto-created next occurrence due 2026-07-08 (completed=False)
+
+5 pending · 1 done · 6 total across 2 pet(s)
 ```
 
 ## 🧪 Testing PawPal+
@@ -75,14 +91,14 @@ Sample test output:
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
+These are the "smart" behaviors in the logic layer and the method that implements each.
 
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Task sorting | `Scheduler.sort_by_time()`, `Scheduler.daily_schedule()`, `Task.sort_key()` | Sorts tasks chronologically by their `"HH:MM"` time (a lambda key; untimed tasks map to `"99:99"` so they sink to the end); `daily_schedule()` breaks ties by priority. |
+| Filtering | `Scheduler.filter_by_pet()`, `Scheduler.filter_by_status()` | Return the tasks for one pet by name, or all `(pet, task)` pairs matching a completion status. |
+| Conflict handling | `Scheduler.detect_conflicts()` | Lightweight, non-crashing check that flags pending tasks sharing the same exact time and returns warning strings (exact-match only — see reflection 2b). |
+| Recurring tasks | `Task.next_occurrence()`, `Scheduler.mark_task_complete()` | Completing a `daily`/`weekly` task auto-creates its next occurrence, advancing `due_date` with `timedelta` (+1 day / +1 week); one-off tasks return `None`. |
 
 ## 📸 Demo Walkthrough
 

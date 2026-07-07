@@ -48,8 +48,9 @@ I did **not** adopt every suggestion. The reviewer also flagged that `priority` 
 
 **b. Tradeoffs**
 
-- Describe one tradeoff your scheduler makes.
-- Why is that tradeoff reasonable for this scenario?
+My conflict detector (`Scheduler.detect_conflicts()`) only flags **exact "HH:MM" time matches** — it does not account for task *durations* or overlapping windows. If a 30-minute walk starts at 08:00 and feeding starts at 08:15, they overlap in real life, but the detector says nothing because their start strings differ.
+
+I chose this on purpose. Tasks don't currently carry a duration, and true overlap detection would mean parsing times into minutes, adding a duration field, and comparing intervals — more moving parts and more ways to be subtly wrong. Exact-match detection is a handful of lines, never crashes, and returns a plain warning string the UI can show. For a busy pet owner, catching "you've scheduled two things at 8:00" already covers the most common and most confusing collision, so the simpler check buys most of the value at a fraction of the complexity. If durations become important later, the detector is the single place I'd extend to compare intervals instead of exact times.
 
 ---
 
